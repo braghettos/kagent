@@ -1,8 +1,9 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import ChatInterface from "@/components/chat/ChatInterface";
+import AcpHarnessChat from "@/components/chat/AcpHarnessChat";
 import { getAgentWithResolvedKind } from "@/app/actions/agents";
 import { getSessionsForAgent, createSession } from "@/app/actions/sessions";
 import { isSingleSessionSandboxAgent, isSubstrateSandboxAgent } from "@/lib/sandboxAgentForm";
@@ -21,7 +22,10 @@ function notifySidebarSession(agentRef: string, session: Session) {
 export default function ChatAgentPage({ params }: { params: Promise<{ name: string; namespace: string }> }) {
   const { name, namespace } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const apcSessionId = searchParams.get("sessionId") || undefined;
   const [gate, setGate] = useState<"loading" | "ready">("loading");
+  const [harnessAcpPath, setHarnessAcpPath] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +34,17 @@ export default function ChatAgentPage({ params }: { params: Promise<{ name: stri
         const agentRes = await getAgentWithResolvedKind(name, namespace);
         if (cancelled) return;
         if (agentRes.error || !agentRes.data) {
+          setGate("ready");
+          return;
+        }
+        // Substrate AgentHarness: chat over ACP through the controller's
+        // same-origin WebSocket proxy instead of the A2A session flow.
+        const substrateHarness = agentRes.data.substrateAgentHarness;
+        if (substrateHarness) {
+          setHarnessAcpPath(
+            substrateHarness.acpPath ||
+              `/api/agentharnesses/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/acp`
+          );
           setGate("ready");
           return;
         }
@@ -102,6 +117,17 @@ export default function ChatAgentPage({ params }: { params: Promise<{ name: stri
           <span className="sr-only">Preparing chat…</span>
         </div>
       </div>
+    );
+  }
+
+  if (harnessAcpPath) {
+    return (
+      <AcpHarnessChat
+        acpPath={harnessAcpPath}
+        namespace={namespace}
+        agentName={name}
+        initialLoadSessionId={apcSessionId}
+      />
     );
   }
 

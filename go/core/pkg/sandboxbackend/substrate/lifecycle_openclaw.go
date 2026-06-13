@@ -16,7 +16,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-const defaultSubstrateOpenClawGatewayPort = 80
+// OpenClawGatewayPort is the loopback port the OpenClaw gateway listens on
+// inside a substrate actor. The acp-shim owns the atenet ingress port
+// (acpListenPort) and passes non-ACP traffic (Control UI) through to it.
+const OpenClawGatewayPort = 18789
+
+// acpListenPort is the actor port atenet-router routes Host-based traffic to.
+const acpListenPort = 80
 
 //go:embed templates/openclaw_startup.sh.tmpl
 var openClawStartupScriptTmplContent string
@@ -26,6 +32,7 @@ var openClawStartupScriptTmpl = template.Must(template.New("openclaw_startup").P
 type openClawStartupScriptData struct {
 	OpenClawJSONBase64 string
 	GatewayPort        int
+	ACPPort            int
 }
 
 // buildOpenClawActorStartup returns the ateom workload startup script and container env for OpenClaw on Substrate.
@@ -42,7 +49,7 @@ func (p *Lifecycle) buildOpenClawActorStartup(ctx context.Context, ah *v1alpha2.
 	if err != nil {
 		return "", nil, fmt.Errorf("resolve gateway token: %w", err)
 	}
-	gw := openclaw.SubstrateGatewayBootstrap(token, defaultSubstrateOpenClawGatewayPort, openClawControlUIBasePath(ah))
+	gw := openclaw.SubstrateGatewayBootstrap(token, OpenClawGatewayPort, openClawControlUIBasePath(ah))
 
 	var jsonBytes []byte
 	var containerEnv []corev1.EnvVar
@@ -66,13 +73,46 @@ func (p *Lifecycle) buildOpenClawActorStartup(ctx context.Context, ah *v1alpha2.
 		if err != nil {
 			return "", nil, fmt.Errorf("build gateway-only openclaw json: %w", err)
 		}
-		containerEnv = []corev1.EnvVar{{Name: "HOME", Value: "/root"}}
+		containerEnv = []corev1.EnvVar{{Name: "HOME", Value: openclaw.SubstrateActorHome}}
 	}
+	containerEnv = append(containerEnv, acpShimEnv(ah, gw.Port)...)
 	script, err = openClawStartupScript(jsonBytes, gw.Port)
 	if err != nil {
 		return "", nil, err
 	}
 	return script, actorTemplateEnvFromPodEnv(containerEnv), nil
+}
+
+// acpShimEnv returns the env vars the acp-shim and the image's
+// openclaw-gateway-ensure/openclaw-acp-child scripts read. The shim reuses
+// the harness gateway token as its bearer token; when the token comes from a
+// Secret it stays a secretKeyRef (resolved by ate-api), never inlined.
+func acpShimEnv(ah *v1alpha2.AgentHarness, gatewayPort int) []corev1.EnvVar {
+	env := []corev1.EnvVar{
+		{Name: "OPENCLAW_GATEWAY_PORT", Value: fmt.Sprintf("%d", gatewayPort)},
+	}
+	return append(env, acpShimTokenEnv(ah)...)
+}
+
+// acpShimTokenEnv returns the ACP_SHIM_TOKEN env var derived from the
+// harness gateway token (secretKeyRef stays a ref, resolved by ate-api).
+func acpShimTokenEnv(ah *v1alpha2.AgentHarness) []corev1.EnvVar {
+	var env []corev1.EnvVar
+	sub := ah.Spec.Substrate
+	if sub != nil && sub.GatewayTokenSecretRef != nil && strings.TrimSpace(sub.GatewayTokenSecretRef.Name) != "" {
+		env = append(env, corev1.EnvVar{
+			Name: "ACP_SHIM_TOKEN",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: sub.GatewayTokenSecretRef.Name},
+					Key:                  GatewayTokenSecretKey,
+				},
+			},
+		})
+	} else if sub != nil && strings.TrimSpace(sub.GatewayToken) != "" {
+		env = append(env, corev1.EnvVar{Name: "ACP_SHIM_TOKEN", Value: strings.TrimSpace(sub.GatewayToken)})
+	}
+	return env
 }
 
 func openClawControlUIBasePath(ah *v1alpha2.AgentHarness) string {
@@ -87,6 +127,7 @@ func openClawStartupScript(jsonBytes []byte, gwPort int) (string, error) {
 	if err := openClawStartupScriptTmpl.Execute(&buf, openClawStartupScriptData{
 		OpenClawJSONBase64: base64.StdEncoding.EncodeToString(jsonBytes),
 		GatewayPort:        gwPort,
+		ACPPort:            acpListenPort,
 	}); err != nil {
 		return "", fmt.Errorf("render openclaw startup script: %w", err)
 	}

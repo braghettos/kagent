@@ -42,22 +42,52 @@ func (p *Lifecycle) ensureActorTemplate(ctx context.Context, ah *v1alpha2.AgentH
 
 func (p *Lifecycle) buildActorTemplate(ctx context.Context, ah *v1alpha2.AgentHarness, wpKey types.NamespacedName) (*atev1alpha1.ActorTemplate, error) {
 	key := types.NamespacedName{Namespace: ah.Namespace, Name: actorTemplateName(ah)}
+
+	var (
+		startupScript string
+		containerEnv  []atev1alpha1.EnvVar
+		defaultImage  string
+		containerName string
+		err           error
+	)
+	// clawBackend selects the OpenClaw startup path; the cluster-wide
+	// DefaultWorkloadImage only applies to claw backends (it points at the
+	// openclaw sandbox image), other backends fall back to their own image.
+	clawBackend := false
+	switch ah.Spec.Backend {
+	case v1alpha2.AgentHarnessBackendOpenClaw, v1alpha2.AgentHarnessBackendNemoClaw:
+		clawBackend = true
+		defaultImage = openclaw.AcpSandboxOpenClawImage
+		containerName = defaultOpenClawContainer
+		startupScript, containerEnv, err = p.buildOpenClawActorStartup(ctx, ah)
+		if err != nil {
+			return nil, fmt.Errorf("build openclaw actor startup: %w", err)
+		}
+	default:
+		spec, ok := acpAgentSpecs[ah.Spec.Backend]
+		if !ok {
+			return nil, fmt.Errorf("substrate runtime does not support backend %q", ah.Spec.Backend)
+		}
+		defaultImage = spec.DefaultImage
+		containerName = string(ah.Spec.Backend)
+		startupScript, containerEnv, err = p.buildAcpAgentActorStartup(ctx, ah, spec)
+		if err != nil {
+			return nil, fmt.Errorf("build %s actor startup: %w", ah.Spec.Backend, err)
+		}
+	}
+
 	workloadImage := strings.TrimSpace(ah.Spec.Substrate.WorkloadImage)
-	if workloadImage == "" {
+	if workloadImage == "" && clawBackend {
 		workloadImage = strings.TrimSpace(p.Defaults.DefaultWorkloadImage)
 	}
 	if workloadImage == "" {
-		workloadImage = openclaw.NemoclawSandboxBaseImage
+		workloadImage = defaultImage
 	} else {
 		var err error
 		workloadImage, err = pinImageRef(workloadImage)
 		if err != nil {
 			return nil, err
 		}
-	}
-	startupScript, containerEnv, err := p.buildOpenClawActorStartup(ctx, ah)
-	if err != nil {
-		return nil, fmt.Errorf("build openclaw actor startup: %w", err)
 	}
 
 	desired := &atev1alpha1.ActorTemplate{
@@ -71,7 +101,7 @@ func (p *Lifecycle) buildActorTemplate(ctx context.Context, ah *v1alpha2.AgentHa
 			Runsc:      defaultRunscConfig(p.Defaults),
 			Containers: []atev1alpha1.Container{
 				{
-					Name:  defaultOpenClawContainer,
+					Name:  containerName,
 					Image: workloadImage,
 					Command: []string{
 						"/bin/sh",

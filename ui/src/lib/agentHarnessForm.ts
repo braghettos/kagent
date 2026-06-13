@@ -1,5 +1,5 @@
 import type { AgentHarnessCrBackend, ValueSource } from "@/types";
-import { AGENT_HARNESS_MESSENGER_BACKENDS } from "@/types";
+import { AGENT_HARNESS_MESSENGER_BACKENDS, AGENT_HARNESS_SUBSTRATE_ONLY_BACKENDS } from "@/types";
 import { k8sRefUtils } from "@/lib/k8sUtils";
 import { generateId } from "@/lib/utils";
 
@@ -10,6 +10,11 @@ export function agentHarnessBackendSupportsMessengerChannels(b: AgentHarnessCrBa
 
 export function isClawHarnessBackend(backend: AgentHarnessCrBackend | undefined): boolean {
   return backend === "openclaw" || backend === "nemoclaw";
+}
+
+/** Backends that only run on the Agent Substrate runtime (no OpenShell control plane). */
+export function isSubstrateOnlyHarnessBackend(backend: AgentHarnessCrBackend | undefined): boolean {
+  return backend !== undefined && AGENT_HARNESS_SUBSTRATE_ONLY_BACKENDS.includes(backend);
 }
 
 export type AgentHarnessChannelFormType = "telegram" | "slack";
@@ -192,6 +197,12 @@ export function validateAgentHarnessForm(args: {
   if (!mr) {
     return agentHarnessValidationFail("general", "Please select a model config for this AgentHarness.");
   }
+  if (isSubstrateOnlyHarnessBackend(backend) && args.harness.runtime !== "substrate") {
+    return agentHarnessValidationFail(
+      "general",
+      "This harness type is only supported on the Agent Substrate runtime.",
+    );
+  }
   if (args.harness.runtime === "substrate" && !args.harness.substrateGatewayToken.trim()) {
     return agentHarnessValidationFail("general", "Substrate gateway token is required.");
   }
@@ -218,7 +229,7 @@ export function validateAgentHarnessForm(args: {
     if (hasConfiguredChannel) {
       return agentHarnessValidationFail(
         "general",
-        "Messenger channels are only supported for OpenClaw and NemoClaw harness types today.",
+        "Messenger channels are not supported for this harness type.",
       );
     }
   }

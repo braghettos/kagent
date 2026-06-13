@@ -138,6 +138,15 @@ func buildGatewaySection(gw GatewayBootstrapConfig) gatewaySection {
 	}
 	if authMode == "token" {
 		section.Auth.Token = gw.Token
+		// openclaw acp (the in-sandbox ACP bridge) authenticates to a
+		// token-auth gateway via gateway.remote.{url,token}. The URL must be
+		// in the config too: when --url is passed on the command line the CLI
+		// ignores remote.token (verified against OpenClaw 2026.5.27), so the
+		// in-sandbox client is launched without --url and resolves both here.
+		section.Remote = &gatewayRemote{
+			URL:   fmt.Sprintf("ws://127.0.0.1:%d", port),
+			Token: gw.Token,
+		}
 	}
 	if gw.ControlUI != nil {
 		section.ControlUi = &controlUiSection{

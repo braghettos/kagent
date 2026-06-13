@@ -7,7 +7,16 @@ import { isHarnessListRow, isOpenshellSandboxRow, isSubstrateHarnessRow } from "
  *
  * Extend this union when new harness runtimes are added; pair with UI/server handling for each backend.
  */
-export const AGENT_HARNESS_BACKENDS = ["openclaw", "nemoclaw", "hermes"] as const;
+export const AGENT_HARNESS_BACKENDS = [
+  "openclaw",
+  "nemoclaw",
+  "hermes",
+  "codex",
+  "claude",
+  "copilot",
+  "gemini",
+  "goose",
+] as const;
 
 export type AgentHarnessBackend = (typeof AGENT_HARNESS_BACKENDS)[number];
 
@@ -51,6 +60,16 @@ export function defaultHarnessSSHLaunchCommand(backend: AgentHarnessBackend): st
   switch (backend) {
     case "hermes":
       return "cd /sandbox/.hermes && exec hermes";
+    case "codex":
+      return "codex";
+    case "claude":
+      return "claude";
+    case "copilot":
+      return "copilot";
+    case "gemini":
+      return "gemini";
+    case "goose":
+      return "goose";
     case "openclaw":
     case "nemoclaw":
       return "openclaw tui";
@@ -66,6 +85,16 @@ export function agentHarnessIcon(backend: AgentHarnessBackend): string {
   switch (backend) {
     case "hermes":
       return "☤";
+    case "codex":
+      return "⧗";
+    case "claude":
+      return "✻";
+    case "copilot":
+      return "⦿";
+    case "gemini":
+      return "✦";
+    case "goose":
+      return "🪿";
     case "openclaw":
     case "nemoclaw":
       return "🦞";
@@ -85,6 +114,16 @@ export function agentHarnessTypeLabel(backend: AgentHarnessBackend): string {
       return "NemoClaw";
     case "hermes":
       return "Hermes";
+    case "codex":
+      return "Codex";
+    case "claude":
+      return "Claude Code";
+    case "copilot":
+      return "GitHub Copilot";
+    case "gemini":
+      return "Gemini CLI";
+    case "goose":
+      return "Goose";
     default: {
       const _exhaustive: never = backend;
       return _exhaustive;

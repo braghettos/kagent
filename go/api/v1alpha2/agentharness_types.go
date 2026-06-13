@@ -18,19 +18,26 @@ import (
 
 // AgentHarnessBackendType selects which sandbox control plane provisions the
 // environment. Additional backends may be added in the future.
-// +kubebuilder:validation:Enum=openclaw;nemoclaw;hermes
+// +kubebuilder:validation:Enum=openclaw;nemoclaw;hermes;codex;claude;copilot;gemini;goose
 type AgentHarnessBackendType string
 
 const (
 	AgentHarnessBackendOpenClaw AgentHarnessBackendType = "openclaw"
 	AgentHarnessBackendNemoClaw AgentHarnessBackendType = "nemoclaw"
 	AgentHarnessBackendHermes   AgentHarnessBackendType = "hermes"
+	AgentHarnessBackendCodex    AgentHarnessBackendType = "codex"
+	AgentHarnessBackendClaude   AgentHarnessBackendType = "claude"
+	AgentHarnessBackendCopilot  AgentHarnessBackendType = "copilot"
+	AgentHarnessBackendGemini   AgentHarnessBackendType = "gemini"
+	AgentHarnessBackendGoose    AgentHarnessBackendType = "goose"
 )
 
 // IsKnownAgentHarnessBackend reports backends the OpenShell harness controller and API expose.
 func IsKnownAgentHarnessBackend(b AgentHarnessBackendType) bool {
 	switch b {
-	case AgentHarnessBackendOpenClaw, AgentHarnessBackendNemoClaw, AgentHarnessBackendHermes:
+	case AgentHarnessBackendOpenClaw, AgentHarnessBackendNemoClaw, AgentHarnessBackendHermes,
+		AgentHarnessBackendCodex, AgentHarnessBackendClaude, AgentHarnessBackendCopilot,
+		AgentHarnessBackendGemini, AgentHarnessBackendGoose:
 		return true
 	default:
 		return false

@@ -264,16 +264,36 @@ export type AgentType = "Declarative" | "BYO" | "AgentHarness";
  * AgentHarness.spec.backend (go/api/v1alpha2/agentharness_types.go).
  * Single source of truth for backend strings — forms, API payloads, and helpers should use this.
  */
-export type AgentHarnessCrBackend = "openclaw" | "nemoclaw" | "hermes";
+export type AgentHarnessCrBackend =
+  | "openclaw"
+  | "nemoclaw"
+  | "hermes"
+  | "codex"
+  | "claude"
+  | "copilot"
+  | "gemini"
+  | "goose";
 /**
  * Backends that support messenger channels (CR validation + channel form).
  */
-export type AgentHarnessMessengerBackend = AgentHarnessCrBackend;
+export type AgentHarnessMessengerBackend = "openclaw" | "nemoclaw" | "hermes";
 
 export const AGENT_HARNESS_MESSENGER_BACKENDS: readonly AgentHarnessMessengerBackend[] = [
   "openclaw",
   "nemoclaw",
   "hermes",
+];
+
+/**
+ * Backends only available on the Agent Substrate runtime (no OpenShell support).
+ * Mirrors the controller wiring: openshell registers openclaw/nemoclaw/hermes only.
+ */
+export const AGENT_HARNESS_SUBSTRATE_ONLY_BACKENDS: readonly AgentHarnessCrBackend[] = [
+  "codex",
+  "claude",
+  "copilot",
+  "gemini",
+  "goose",
 ];
 
 /** Single Git repository source for skills. */
@@ -464,6 +484,8 @@ export interface SubstrateAgentHarnessListEntry {
   actorId?: string;
   /** Same-origin path for OpenClaw UI (HTTP + WebSocket via kagent proxy to actor pod IP). */
   gatewayUIPath?: string;
+  /** Same-origin WebSocket path for the ACP chat proxy. */
+  acpPath?: string;
   modelConfigRef?: string;
   backendRefId?: string;
   endpoint?: string;

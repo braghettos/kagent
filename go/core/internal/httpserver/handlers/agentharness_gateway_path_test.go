@@ -51,6 +51,13 @@ func TestResolveGatewayUpstreamPath(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:      "acp websocket endpoint",
+			path:      "/api/agentharnesses/kagent/my-claw/acp",
+			wsUpgrade: true,
+			wantUp:    "/acp",
+			wantOK:    true,
+		},
+		{
 			name:   "unknown path",
 			path:   "/api/agentharnesses/kagent/my-claw/api/v1/foo",
 			wantOK: false,

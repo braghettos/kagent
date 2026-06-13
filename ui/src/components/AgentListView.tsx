@@ -26,7 +26,6 @@ import {
 } from "@/lib/agentHarness";
 import {
   isOpenshellSandboxRow,
-  isSubstrateHarnessRow,
   openshellTerminalHref,
 } from "@/lib/openshellSandboxAgents";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -271,7 +270,6 @@ function AgentListRow({ item, onAgentsChanged }: { item: AgentResponse; onAgents
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const sshSandbox = isOpenshellSandboxRow(item);
-  const substrateHarness = isSubstrateHarnessRow(item);
   const agentHarness = isAgentHarness(item);
   const harnessBackend = getAgentHarnessBackend(item);
 
@@ -283,24 +281,19 @@ function AgentListRow({ item, onAgentsChanged }: { item: AgentResponse; onAgents
   const nTools = countAgentToolBindings(item);
   const nSkills = countSkills(agent);
 
-  const substrateGatewayPath = item.substrateAgentHarness?.gatewayUIPath;
   const gatewaySandboxName = item.openshellAgentHarness?.gatewaySandboxName;
   const chatPath = useMemo(
     () =>
-      substrateHarness && substrateGatewayPath
-        ? substrateGatewayPath
-        : sshSandbox && gatewaySandboxName
-          ? openshellTerminalHref({
-              gatewaySandboxName,
-              namespace,
-              crName: name,
-              modelConfigRef: item.modelConfigRef,
-              harnessBackend,
-            })
-          : `/agents/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/chat`,
+      sshSandbox && gatewaySandboxName
+        ? openshellTerminalHref({
+            gatewaySandboxName,
+            namespace,
+            crName: name,
+            modelConfigRef: item.modelConfigRef,
+            harnessBackend,
+          })
+        : `/agents/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/chat`,
     [
-      substrateHarness,
-      substrateGatewayPath,
       sshSandbox,
       gatewaySandboxName,
       namespace,

@@ -30,6 +30,7 @@ export default function ChatLayoutUI({
 }: ChatLayoutUIProps) {
   const pathname = usePathname();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [acpSessions, setAcpSessions] = useState<Array<{ sessionId: string; title?: string; updatedAt?: string }>>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
 
   // Convert RemoteMCPServerResponse[] to ToolsResponse[]
@@ -51,7 +52,7 @@ export default function ChatLayoutUI({
     return tools;
   }, [allTools]);
 
-  
+
   useEffect(() => {
     const refreshSessions = async () => {
       setIsLoadingSessions(true);
@@ -98,6 +99,23 @@ export default function ChatLayoutUI({
     };
   }, [agentName, namespace]);
 
+  useEffect(() => {
+    // Listen for ACP harness session list updates from AcpHarnessChat
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleAcpSessionsUpdate = (event: any) => {
+      const { agentRef, sessions } = event.detail;
+      const currentAgentRef = `${namespace}/${agentName}`;
+      if (agentRef === currentAgentRef && Array.isArray(sessions)) {
+        setAcpSessions(sessions);
+      }
+    };
+
+    window.addEventListener('acp-sessions-updated', handleAcpSessionsUpdate);
+    return () => {
+      window.removeEventListener('acp-sessions-updated', handleAcpSessionsUpdate);
+    };
+  }, [agentName, namespace]);
+
   return (
     <>
       <SessionsSidebar
@@ -106,6 +124,7 @@ export default function ChatLayoutUI({
         currentAgent={currentAgent}
         allAgents={allAgents}
         agentSessions={sessions}
+        acpSessions={acpSessions}
         isLoadingSessions={isLoadingSessions}
       />
       <main className="w-full max-w-6xl mx-auto px-4">
@@ -124,4 +143,4 @@ export default function ChatLayoutUI({
       />
     </>
   );
-} 
+}

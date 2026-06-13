@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   defaultAgentHarnessFormSlice,
+  isSubstrateOnlyHarnessBackend,
   type AgentHarnessFormSlice,
 } from "@/lib/agentHarnessForm";
 import type { AgentHarnessCrBackend, ModelConfig } from "@/types";
@@ -28,6 +29,11 @@ import { PageHeader } from "@/components/layout/PageHeader";
 const HARNESS_OPTIONS = [
   { value: "nemoclaw-openclaw", label: "NemoClaw (OpenClaw)", backend: "openclaw" as const },
   { value: "hermes", label: "Hermes", backend: "hermes" as const },
+  { value: "codex", label: "Codex (Substrate only)", backend: "codex" as const },
+  { value: "claude", label: "Claude Code (Substrate only)", backend: "claude" as const },
+  { value: "copilot", label: "GitHub Copilot (Substrate only)", backend: "copilot" as const },
+  { value: "gemini", label: "Gemini CLI (Substrate only)", backend: "gemini" as const },
+  { value: "goose", label: "Goose (Substrate only)", backend: "goose" as const },
 ] as const;
 
 const HERMES_DEFAULT_IMAGE = "ghcr.io/nvidia/nemoclaw/hermes-sandbox-base:latest";
@@ -263,10 +269,14 @@ function AgentHarnessPageContent() {
                     onValueChange={(val) => {
                       const harnessType = val as FormState["harnessType"];
                       setState((prev) => {
+                        const backend = harnessBackendForType(harnessType);
                         const nextHarnessForm = {
                           ...prev.harnessForm,
-                          backend: harnessBackendForType(harnessType),
+                          backend,
                         };
+                        if (isSubstrateOnlyHarnessBackend(backend)) {
+                          nextHarnessForm.runtime = "substrate";
+                        }
                         if (harnessType === "hermes" && !prev.harnessForm.image.trim()) {
                           nextHarnessForm.image = HERMES_DEFAULT_IMAGE;
                         }

@@ -16,7 +16,12 @@ import type {
   AgentHarnessFormSlice,
   AgentHarnessFormValidationError,
 } from "@/lib/agentHarnessForm";
-import { isClawHarnessBackend, newAgentHarnessChannelRow } from "@/lib/agentHarnessForm";
+import {
+  agentHarnessBackendSupportsMessengerChannels,
+  isClawHarnessBackend,
+  isSubstrateOnlyHarnessBackend,
+  newAgentHarnessChannelRow,
+} from "@/lib/agentHarnessForm";
 import type { AgentHarnessCrBackend } from "@/types";
 import { useSubstrateEnabled } from "@/contexts/SubstrateFeaturesContext";
 
@@ -153,15 +158,22 @@ export function AgentHarnessFields({
   const substrateEnabled = useSubstrateEnabled();
   const harnessBackend = value.backend;
   const clawBackend = isClawHarnessBackend(harnessBackend);
+  const substrateOnly = isSubstrateOnlyHarnessBackend(harnessBackend);
+  const channelsSupported = agentHarnessBackendSupportsMessengerChannels(harnessBackend);
   const set = (patch: Partial<AgentHarnessFormSlice>) => onChange({ ...value, ...patch });
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
   const section = validationError?.section ?? null;
 
   React.useEffect(() => {
-    if (!substrateEnabled && value.runtime === "substrate") {
+    // Substrate-only backends (codex, claude) have no OpenShell control plane.
+    if (substrateOnly && value.runtime !== "substrate") {
+      set({ runtime: "substrate" });
+      return;
+    }
+    if (!substrateEnabled && !substrateOnly && value.runtime === "substrate") {
       set({ runtime: "openshell" });
     }
-  }, [substrateEnabled, value.runtime]);
+  }, [substrateEnabled, substrateOnly, value.runtime]);
 
   return (
     <div id="section-agent-harness-sandbox" className="space-y-8">
@@ -169,7 +181,7 @@ export function AgentHarnessFields({
         {section === "general" ? validationError?.message : null}
       </FieldError>
 
-      {substrateEnabled ? (
+      {substrateEnabled || substrateOnly ? (
         <FormSection
           id="section-agent-harness-runtime"
           title="Runtime"
@@ -180,7 +192,7 @@ export function AgentHarnessFields({
             <select
               id="agent-field-harness-runtime"
               className="flex h-9 w-full max-w-md rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-              disabled={disabled}
+              disabled={disabled || substrateOnly}
               value={value.runtime}
               onChange={(e) =>
                 set({ runtime: e.target.value === "substrate" ? "substrate" : "openshell" })
@@ -189,6 +201,11 @@ export function AgentHarnessFields({
               <option value="openshell">OpenShell</option>
               <option value="substrate">Agent Substrate</option>
             </select>
+            {substrateOnly ? (
+              <p className="text-xs text-muted-foreground">
+                This harness type runs on Agent Substrate only.
+              </p>
+            ) : null}
           </FieldRoot>
           {value.runtime === "substrate" ? (
             <div className="space-y-4">
@@ -236,6 +253,7 @@ export function AgentHarnessFields({
         </FormSection>
       ) : null}
 
+      {channelsSupported ? (
       <FormSection
         id="section-agent-harness-channels"
         title="Channels integrations"
@@ -663,6 +681,7 @@ export function AgentHarnessFields({
         )}
       </FieldRoot>
       </FormSection>
+      ) : null}
 
       <FormSection
         id="section-agent-harness-network"

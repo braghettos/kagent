@@ -73,6 +73,11 @@ spec:
                 - openclaw
                 - nemoclaw
                 - hermes
+                - codex
+                - claude
+                - copilot
+                - gemini
+                - goose
                 type: string
               channels:
                 description: Channels configures Telegram and Slack integrations for
@@ -612,6 +617,11 @@ spec:
                     - openclaw
                     - nemoclaw
                     - hermes
+                    - codex
+                    - claude
+                    - copilot
+                    - gemini
+                    - goose
                     type: string
                   id:
                     type: string

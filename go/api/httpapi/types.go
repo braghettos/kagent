@@ -148,13 +148,16 @@ type OpenshellAgentHarnessListEntry struct {
 
 // SubstrateAgentHarnessListEntry is set when runtime is substrate.
 type SubstrateAgentHarnessListEntry struct {
-	Backend        v1alpha2.AgentHarnessBackendType `json:"backend"`
-	Runtime        v1alpha2.AgentHarnessRuntime     `json:"runtime"`
-	ActorID        string                           `json:"actorId,omitempty"`
-	GatewayUIPath  string                           `json:"gatewayUIPath,omitempty"`
-	ModelConfigRef string                           `json:"modelConfigRef,omitempty"`
-	BackendRefID   string                           `json:"backendRefId,omitempty"`
-	Endpoint       string                           `json:"endpoint,omitempty"`
+	Backend       v1alpha2.AgentHarnessBackendType `json:"backend"`
+	Runtime       v1alpha2.AgentHarnessRuntime     `json:"runtime"`
+	ActorID       string                           `json:"actorId,omitempty"`
+	GatewayUIPath string                           `json:"gatewayUIPath,omitempty"`
+	// AcpPath is the server-side ACP WebSocket proxy path for chatting with
+	// the harness from the kagent UI.
+	AcpPath        string `json:"acpPath,omitempty"`
+	ModelConfigRef string `json:"modelConfigRef,omitempty"`
+	BackendRefID   string `json:"backendRefId,omitempty"`
+	Endpoint       string `json:"endpoint,omitempty"`
 }
 
 type AgentResponse struct {

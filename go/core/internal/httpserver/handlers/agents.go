@@ -197,6 +197,7 @@ func (h *AgentsHandler) openshellAgentHarnessAgentResponse(ctx context.Context, 
 			Runtime:        runtime,
 			ModelConfigRef: sb.Spec.ModelConfigRef,
 			GatewayUIPath:  fmt.Sprintf("/api/agentharnesses/%s/%s/gateway/", sb.Namespace, sb.Name),
+			AcpPath:        fmt.Sprintf("/api/agentharnesses/%s/%s/acp", sb.Namespace, sb.Name),
 		}
 		if sb.Status.BackendRef != nil {
 			subEntry.BackendRefID = sb.Status.BackendRef.ID

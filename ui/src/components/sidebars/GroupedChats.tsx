@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import ChatGroup from "./SessionGroup";
 import type { Session } from "@/types";
 import { isToday, isYesterday } from "date-fns";
@@ -15,15 +16,27 @@ interface GroupedChatsProps {
   agentName: string;
   agentNamespace: string;
   sessions: Session[];
+  acpSessions?: Array<{ sessionId: string; title?: string; updatedAt?: string }>;
+  onAcpSessionClick?: (sessionId: string) => void;
   chatMode?: SandboxChatMode;
+}
+
+function acpSessionLabel(s: { sessionId: string; title?: string; updatedAt?: string }): string {
+  const title = s.title?.trim() || s.sessionId.slice(0, 18);
+  if (!s.updatedAt) return title;
+  const d = new Date(s.updatedAt);
+  return Number.isNaN(d.getTime()) ? title : `${title} · ${d.toLocaleString()}`;
 }
 
 export default function GroupedChats({
   agentName,
   agentNamespace,
   sessions,
+  acpSessions = [],
+  onAcpSessionClick,
   chatMode = "default",
 }: GroupedChatsProps) {
+  const router = useRouter();
   const hideNewChat = chatMode === "single-session";
   const hideSessionDelete = chatMode === "single-session";
   const provisionSessionOnNewChat = chatMode === "multi-session";
@@ -85,7 +98,7 @@ export default function GroupedChats({
     try {
       // Immediately remove from local state
       setLocalSessions(prev => prev.filter(session => session.id !== sessionId));
-      
+
       // Then delete from server
       await deleteSession(sessionId);
     } catch (error) {
@@ -143,7 +156,13 @@ export default function GroupedChats({
     window.location.href = `/agents/${agentNamespace}/${agentName}/chat`;
   };
 
-  const hasNoSessions = !groupedChats.today.length && !groupedChats.yesterday.length && !groupedChats.older.length;
+  const hasNoSessions = !groupedChats.today.length && !groupedChats.yesterday.length && !groupedChats.older.length && acpSessions.length === 0;
+
+  const handleAcpSessionClick = (sessionId: string) => {
+    // Navigate with sessionId as query param for ACP harness chat
+    router.push(`/agents/${agentNamespace}/${agentName}/chat?sessionId=${encodeURIComponent(sessionId)}`);
+    onAcpSessionClick?.(sessionId);
+  };
 
   return (
     <>
@@ -160,7 +179,23 @@ export default function GroupedChats({
       </div>
       )}
 
-      {hasNoSessions || localSessions.length === 0 ? (
+      {acpSessions.length > 0 && (
+        <div className="mb-4 px-2">
+          <div className="text-xs font-semibold text-muted-foreground mb-2 px-2">Previous chats</div>
+          {acpSessions.map((session) => (
+            <button
+              key={session.sessionId}
+              onClick={() => handleAcpSessionClick(session.sessionId)}
+              className="w-full text-left px-2 py-2 text-sm rounded-md hover:bg-accent hover:text-accent-foreground truncate transition-colors"
+              title={acpSessionLabel(session)}
+            >
+              {acpSessionLabel(session)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {hasNoSessions || (localSessions.length === 0 && acpSessions.length === 0) ? (
         <EmptyState variant={hideNewChat ? "singleChat" : "default"} />
       ) : (
         <>

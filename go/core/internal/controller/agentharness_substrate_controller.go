@@ -42,22 +42,15 @@ const (
 // SubstrateAgentHarnessController reconciles AgentHarness resources that use the
 // Substrate runtime.
 type SubstrateAgentHarnessController struct {
-	Client             client.Client
-	Recorder           events.EventRecorder
-	OpenClawBackend    sandboxbackend.AsyncBackend
-	NemoClawBackend    sandboxbackend.AsyncBackend
+	Client   client.Client
+	Recorder events.EventRecorder
+	// Backends maps the harness backend type to its substrate AsyncBackend.
+	Backends           map[v1alpha2.AgentHarnessBackendType]sandboxbackend.AsyncBackend
 	SubstrateLifecycle substrate.AgentHarnessLifecycle
 }
 
 func (r *SubstrateAgentHarnessController) backendFor(ah *v1alpha2.AgentHarness) sandboxbackend.AsyncBackend {
-	switch ah.Spec.Backend {
-	case v1alpha2.AgentHarnessBackendOpenClaw:
-		return r.OpenClawBackend
-	case v1alpha2.AgentHarnessBackendNemoClaw:
-		return r.NemoClawBackend
-	default:
-		return nil
-	}
+	return r.Backends[ah.Spec.Backend]
 }
 
 func (r *SubstrateAgentHarnessController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

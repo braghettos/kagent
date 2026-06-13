@@ -618,11 +618,10 @@ func Start(getExtensionConfig GetExtensionConfig, migrationRunner MigrationRunne
 			os.Exit(1)
 		}
 	}
-	var substrateOpenClawBackend sandboxbackend.AsyncBackend
-	var substrateNemoClawBackend sandboxbackend.AsyncBackend
+	var substrateHarnessBackends map[v1alpha2.AgentHarnessBackendType]sandboxbackend.AsyncBackend
 	if cfg.Substrate.AteAPIEndpoint != "" {
 		var err error
-		substrateOpenClawBackend, substrateNemoClawBackend, err = buildSubstrateHarnessBackends(ctx, &cfg, substrateAteClient)
+		substrateHarnessBackends, err = buildSubstrateHarnessBackends(ctx, &cfg, substrateAteClient)
 		if err != nil {
 			setupLog.Error(err, "unable to build substrate harness backends")
 			os.Exit(1)
@@ -651,19 +650,18 @@ func Start(getExtensionConfig GetExtensionConfig, migrationRunner MigrationRunne
 			os.Exit(1)
 		}
 	}
-	if substrateOpenClawBackend != nil || substrateNemoClawBackend != nil {
+	if len(substrateHarnessBackends) > 0 {
 		if err := (&controller.SubstrateAgentHarnessController{
 			Client:             kubeClient,
 			Recorder:           mgr.GetEventRecorder("agentharness-substrate-controller"),
-			OpenClawBackend:    substrateOpenClawBackend,
-			NemoClawBackend:    substrateNemoClawBackend,
+			Backends:           substrateHarnessBackends,
 			SubstrateLifecycle: substrateLifecycle,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "SubstrateAgentHarness")
 			os.Exit(1)
 		}
 	}
-	if openshellOpenClawBackend == nil && openshellHermesBackend == nil && substrateOpenClawBackend == nil && substrateNemoClawBackend == nil {
+	if openshellOpenClawBackend == nil && openshellHermesBackend == nil && len(substrateHarnessBackends) == 0 {
 		setupLog.Info("AgentHarness controller disabled: set --openshell-gateway-url and/or --substrate-ate-api-endpoint")
 	}
 
@@ -850,15 +848,26 @@ func buildOpenshellSandboxBackends(ctx context.Context, cfg *Config, kubeClient 
 	return ocl, hermesBackend, nil
 }
 
-func buildSubstrateHarnessBackends(ctx context.Context, cfg *Config, client *substrate.Client) (sandboxbackend.AsyncBackend, sandboxbackend.AsyncBackend, error) {
+func buildSubstrateHarnessBackends(ctx context.Context, cfg *Config, client *substrate.Client) (map[v1alpha2.AgentHarnessBackendType]sandboxbackend.AsyncBackend, error) {
 	if client == nil {
-		return nil, nil, fmt.Errorf("substrate ate-api client is required")
+		return nil, fmt.Errorf("substrate ate-api client is required")
 	}
 	_ = ctx
 	_ = cfg
-	ocl := substrate.NewOpenClawBackend(client, v1alpha2.AgentHarnessBackendOpenClaw, nil)
-	ncl := substrate.NewOpenClawBackend(client, v1alpha2.AgentHarnessBackendNemoClaw, nil)
-	return ocl, ncl, nil
+	backends := make(map[v1alpha2.AgentHarnessBackendType]sandboxbackend.AsyncBackend)
+	for _, b := range []v1alpha2.AgentHarnessBackendType{
+		v1alpha2.AgentHarnessBackendOpenClaw,
+		v1alpha2.AgentHarnessBackendNemoClaw,
+		v1alpha2.AgentHarnessBackendHermes,
+		v1alpha2.AgentHarnessBackendCodex,
+		v1alpha2.AgentHarnessBackendClaude,
+		v1alpha2.AgentHarnessBackendCopilot,
+		v1alpha2.AgentHarnessBackendGemini,
+		v1alpha2.AgentHarnessBackendGoose,
+	} {
+		backends[b] = substrate.NewOpenClawBackend(client, b, nil)
+	}
+	return backends, nil
 }
 
 func substrateAppConfig(cfg *Config) substrate.Config {
@@ -879,7 +888,7 @@ func substrateLifecycleFromConfig(kubeClient client.Client, cfg *Config, ate *su
 		RunscAMD64SHA256:     cfg.Substrate.RunscAMD64SHA256,
 		RunscARM64URL:        cfg.Substrate.RunscARM64URL,
 		RunscARM64SHA256:     cfg.Substrate.RunscARM64SHA256,
-		DefaultWorkloadImage: openclaw.NemoclawSandboxBaseImage,
+		DefaultWorkloadImage: openclaw.AcpSandboxOpenClawImage,
 		DefaultWorkerPool: types.NamespacedName{
 			Namespace: cfg.Substrate.DefaultWorkerPoolNamespace,
 			Name:      cfg.Substrate.DefaultWorkerPoolName,

@@ -20,9 +20,12 @@ import (
 const (
 	// OpenClaw 2026.3.28+ returns 403 without operator scopes on HTTP/WS when only Bearer token is sent.
 	openclawDefaultOperatorScopes = "operator.admin"
-	// Origin OpenClaw accepts by default for bind=lan port=80 (localhost/127.0.0.1 on gateway port).
-	openclawLoopbackOrigin = "http://127.0.0.1:80"
 )
+
+// openclawLoopbackOrigin is the Origin OpenClaw accepts by default
+// (localhost/127.0.0.1 on the gateway port). The gateway listens on the
+// loopback port behind the acp-shim, which owns the actor ingress port.
+var openclawLoopbackOrigin = fmt.Sprintf("http://127.0.0.1:%d", substrate.OpenClawGatewayPort)
 
 // AgentHarnessGatewayConfig configures Substrate harness HTTP/WebSocket proxy.
 // Traffic is proxied through atenet-router (Envoy) using actor Host-based routing.
@@ -136,7 +139,8 @@ func agentHarnessGatewayPublicPrefix(namespace, name string) string {
 // resolveGatewayUpstreamPath maps the public URL to the upstream path on the actor.
 // redirectTo is set when the browser should use a trailing slash under /gateway/.
 // OpenClaw is configured with the same controlUi.basePath, so the proxy preserves
-// the public gateway base path when forwarding to the actor.
+// the public gateway base path when forwarding to the actor. The /acp suffix maps
+// to the acp-shim WebSocket endpoint on the actor.
 func resolveGatewayUpstreamPath(requestPath, namespace, name string, wsUpgrade bool) (upstreamPath, redirectTo string, ok bool) {
 	base := agentHarnessHarnessBase(namespace, name)
 	if !strings.HasPrefix(requestPath, base) {
@@ -148,6 +152,8 @@ func resolveGatewayUpstreamPath(requestPath, namespace, name string, wsUpgrade b
 	}
 
 	switch {
+	case rel == "/acp":
+		return "/acp", "", true
 	case rel == "/gateway":
 		upstream := agentHarnessGatewayPublicPrefix(namespace, name)
 		if wsUpgrade {

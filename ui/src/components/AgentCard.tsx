@@ -28,7 +28,6 @@ import {
 } from "@/lib/agentHarness";
 import {
   isOpenshellSandboxRow,
-  isSubstrateHarnessRow,
   openshellTerminalHref,
 } from "@/lib/openshellSandboxAgents";
 import { cn } from "@/lib/utils";
@@ -45,7 +44,6 @@ export function AgentCard({ agentResponse, onAgentsChanged }: AgentCardProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const sshSandbox = isOpenshellSandboxRow(agentResponse);
-  const substrateHarness = isSubstrateHarnessRow(agentResponse);
   const agentHarness = isAgentHarness(agentResponse);
   const harnessBackend = getAgentHarnessBackend(agentResponse);
   const harnessRuntime = getAgentHarnessRuntime(agentResponse);
@@ -185,19 +183,16 @@ export function AgentCard({ agentResponse, onAgentsChanged }: AgentCardProps) {
     </Card>
   );
 
-  const substrateGatewayPath = agentResponse.substrateAgentHarness?.gatewayUIPath;
   const chatHref =
-    substrateHarness && substrateGatewayPath
-      ? substrateGatewayPath
-      : sshSandbox && agentResponse.openshellAgentHarness
-        ? openshellTerminalHref({
-            gatewaySandboxName: agentResponse.openshellAgentHarness.gatewaySandboxName,
-            namespace: agent.metadata.namespace,
-            crName: agent.metadata.name,
-            modelConfigRef: agentResponse.modelConfigRef,
-            harnessBackend,
-          })
-        : `/agents/${agent.metadata.namespace}/${agent.metadata.name}/chat`;
+    sshSandbox && agentResponse.openshellAgentHarness
+      ? openshellTerminalHref({
+          gatewaySandboxName: agentResponse.openshellAgentHarness.gatewaySandboxName,
+          namespace: agent.metadata.namespace,
+          crName: agent.metadata.name,
+          modelConfigRef: agentResponse.modelConfigRef,
+          harnessBackend,
+        })
+      : `/agents/${agent.metadata.namespace}/${agent.metadata.name}/chat`;
 
   return (
     <>
