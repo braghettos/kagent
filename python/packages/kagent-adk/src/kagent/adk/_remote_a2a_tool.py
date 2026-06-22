@@ -52,6 +52,7 @@ from kagent.core.a2a import (
     KAGENT_HITL_DECISION_TYPE_REJECT,
     extract_hitl_info_from_task,
 )
+from opentelemetry import trace
 
 logger = logging.getLogger("kagent_adk." + __name__)
 
@@ -329,18 +330,32 @@ class KAgentRemoteA2ATool(BaseTool):
         call_context = self._build_call_context(tool_context)
 
         task: Optional[Task] = None
-        try:
-            async for response in client.send_message(request=message, context=call_context):
-                if isinstance(response, tuple):
-                    # ClientEvent: (Task, UpdateEvent | None)
-                    task = response[0]
-                elif isinstance(response, A2AMessage):
-                    return self._extract_text_from_message(response)
-        except A2AClientHTTPError as e:
-            return f"Remote agent '{self.name}' request failed: {e}"
-        except Exception as e:
-            logger.error("Error calling remote agent %s: %s", self.name, e, exc_info=True)
-            return f"Remote agent '{self.name}' request failed: {e}"
+        # First-class inter-agent edge span: names the A->B call (this agent -> the peer agent)
+        # so the agent-conversation graph is a queryable span, not just a host-implied HTTP edge.
+        # traceparent already propagates over the A2A hop (HTTPXClientInstrumentor), so this span
+        # auto-parents the remote agent's server spans.
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span(
+            "invoke_agent",
+            kind=trace.SpanKind.CLIENT,
+            attributes={
+                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.agent.name": self.name,
+                "peer.agent.url": self._agent_card_url,
+            },
+        ):
+            try:
+                async for response in client.send_message(request=message, context=call_context):
+                    if isinstance(response, tuple):
+                        # ClientEvent: (Task, UpdateEvent | None)
+                        task = response[0]
+                    elif isinstance(response, A2AMessage):
+                        return self._extract_text_from_message(response)
+            except A2AClientHTTPError as e:
+                return f"Remote agent '{self.name}' request failed: {e}"
+            except Exception as e:
+                logger.error("Error calling remote agent %s: %s", self.name, e, exc_info=True)
+                return f"Remote agent '{self.name}' request failed: {e}"
 
         if task is None:
             return f"Remote agent '{self.name}' returned no result."

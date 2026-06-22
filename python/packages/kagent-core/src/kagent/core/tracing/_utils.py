@@ -121,7 +121,14 @@ def configure(name: str = "kagent", namespace: str = "kagent", fastapi_app: Fast
     tracing_enabled = os.getenv("OTEL_TRACING_ENABLED", "false").lower() == "true"
     logging_enabled = os.getenv("OTEL_LOGGING_ENABLED", "false").lower() == "true"
 
-    resource = Resource({"service.name": name, "service.namespace": namespace})
+    # Mirror the Phase-1 log formatter's resource (kagent.core._logging) so traces, logs and
+    # metrics share service.version + krateo.io/composition-id, not just service.name/namespace.
+    _attrs = {"service.name": name, "service.namespace": namespace}
+    if _sv := os.getenv("SERVICE_VERSION"):
+        _attrs["service.version"] = _sv
+    if _cid := os.getenv("KRATEO_COMPOSITION_ID"):
+        _attrs["krateo.io/composition-id"] = _cid
+    resource = Resource(_attrs)
 
     # Configure tracing if enabled
     if tracing_enabled:
