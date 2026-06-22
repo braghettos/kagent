@@ -1,0 +1,59 @@
+# Publish the kagent ADK *app* image from THIS fork to its own registry.
+#
+# Upstream's tag.yaml is unusable on the fork: it pushes images to kagent-dev,
+# helm to oci://ghcr.io/kagent-dev, and Python packages to PyPI (PYPI_TOKEN) --
+# none of which this fork's token can push to. KOS-1 only needs the Python agent
+# image (which carries kagent.core's OTelJSONFormatter), so this builds just the
+# `app` image (plus its kagent-adk base, a build-app dependency) and pushes both
+# to ghcr.io/<this-repo>/{app,kagent-adk} by overriding DOCKER_REPO -- the only
+# thing the upstream Makefile gets wrong for a fork (it defaults to kagent-dev).
+#
+# Trigger manually (Actions -> "Release app image (fork)" -> Run workflow) with a
+# version, e.g. 1.0.0 -> ghcr.io/braghettos/kagent/app:1.0.0.
+name: Release app image (fork)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image tag to publish (e.g. 1.0.0)'
+        required: true
+
+jobs:
+  push-app-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          name: kagent-builder-v0.23.0
+          platforms: linux/amd64,linux/arm64
+          version: v0.23.0
+          use: 'true'
+
+      - name: Build & push app image to the fork registry
+        env:
+          DOCKER_BUILD_ARGS: "--push --platform linux/amd64,linux/arm64"
+          DOCKER_BUILDER: "docker buildx build"
+          DOCKER_REGISTRY: "ghcr.io"
+          # Push to THIS fork (ghcr.io/<owner>/kagent/...), NOT the upstream
+          # kagent-dev default baked into the Makefile, which the fork can't push to.
+          DOCKER_REPO: ${{ github.repository }}
+          VERSION: ${{ github.event.inputs.version }}
+        run: make build-app
