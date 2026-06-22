@@ -11,7 +11,7 @@ from a2a.types import AgentCard
 from agentsts.adk import ADKSTSIntegration, ADKTokenPropagationPlugin
 from google.adk.agents import BaseAgent
 from google.adk.cli.utils.agent_loader import AgentLoader
-from kagent.core import KAgentConfig, configure_logging, configure_tracing
+from kagent.core import KAgentConfig, configure_logging, configure_metrics, configure_tracing
 
 from . import AgentConfig, KAgentApp
 from .tools import add_skills_tool_to_agent
@@ -78,6 +78,12 @@ def static(
             plugins = []
         plugins.append(LLMPassthroughPlugin())
 
+    from ._krateo_telemetry_plugin import KrateoTelemetryPlugin
+
+    if plugins is None:
+        plugins = []
+    plugins.append(KrateoTelemetryPlugin())
+
     def root_agent_factory() -> BaseAgent:
         root_agent = agent_config.to_agent(app_cfg.name, sts_integration, propagate_token)
 
@@ -97,6 +103,7 @@ def static(
 
     server = kagent_app.build()
     configure_tracing(app_cfg.name, app_cfg.namespace, server)
+    configure_metrics(app_cfg.name, app_cfg.namespace)
 
     uvicorn.run(
         server,
@@ -146,6 +153,12 @@ def run(
     sts_integration = create_sts_integration()
     if sts_integration:
         plugins = [sts_integration]
+
+    from ._krateo_telemetry_plugin import KrateoTelemetryPlugin
+
+    if plugins is None:
+        plugins = []
+    plugins.append(KrateoTelemetryPlugin())
 
     agent_loader = AgentLoader(agents_dir=working_dir)
 
@@ -200,6 +213,7 @@ def run(
         server = kagent_app.build()
 
     configure_tracing(app_cfg.name, app_cfg.namespace, server)
+    configure_metrics(app_cfg.name, app_cfg.namespace)
 
     uvicorn.run(
         server,
