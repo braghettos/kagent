@@ -357,7 +357,26 @@ func Start(getExtensionConfig GetExtensionConfig, migrationRunner MigrationRunne
 		setupLog.Error(err, "failed to load configuration from environment variables")
 		os.Exit(1)
 	}
-	logger := zap.New(zap.UseFlagOptions(&opts))
+	// Initialize the OTLP LoggerProvider before building the controller logger so
+	// the otelzap bridge core (added below via ControllerZapOpts) binds to it.
+	// Gated by OTEL_LOGGING_ENABLED; a no-op shutdown is returned when disabled.
+	shutdownLogging, err := telemetry.InitLoggerProvider(ctx, Version)
+	if err != nil {
+		setupLog.Error(err, "failed to initialize logging")
+		os.Exit(1)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownLogging(shutdownCtx); err != nil {
+			setupLog.Error(err, "failed to shutdown logging")
+		}
+	}()
+
+	// Build the controller logger. When OTEL_LOGGING_ENABLED is set, additively
+	// tee stdout logs through the OTLP bridge; otherwise this is upstream-identical.
+	zapOpts := append([]zap.Opts{zap.UseFlagOptions(&opts)}, telemetry.ControllerZapOpts()...)
+	logger := zap.New(zapOpts...)
 	ctrl.SetLogger(logger)
 
 	shutdownTracing, err := telemetry.InitTracerProvider(ctx, Version)
@@ -593,6 +612,8 @@ func Start(getExtensionConfig GetExtensionConfig, migrationRunner MigrationRunne
 	if err := (&controller.MCPServerToolController{
 		Scheme:     mgr.GetScheme(),
 		Reconciler: rcnclr,
+		Client:     mgr.GetClient(),
+		Recorder:   mgr.GetEventRecorder("mcpserver-tool-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Service")
 		os.Exit(1)
@@ -602,6 +623,8 @@ func Start(getExtensionConfig GetExtensionConfig, migrationRunner MigrationRunne
 		Scheme:        mgr.GetScheme(),
 		Reconciler:    rcnclr,
 		AdkTranslator: apiTranslator,
+		Client:        mgr.GetClient(),
+		Recorder:      mgr.GetEventRecorder("agent-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Agent")
 		os.Exit(1)
@@ -670,6 +693,8 @@ func Start(getExtensionConfig GetExtensionConfig, migrationRunner MigrationRunne
 	if err = (&controller.ModelConfigController{
 		Scheme:     mgr.GetScheme(),
 		Reconciler: rcnclr,
+		Client:     mgr.GetClient(),
+		Recorder:   mgr.GetEventRecorder("modelconfig-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ModelConfig")
 		os.Exit(1)
@@ -686,6 +711,8 @@ func Start(getExtensionConfig GetExtensionConfig, migrationRunner MigrationRunne
 	if err = (&controller.RemoteMCPServerController{
 		Scheme:     mgr.GetScheme(),
 		Reconciler: rcnclr,
+		Client:     mgr.GetClient(),
+		Recorder:   mgr.GetEventRecorder("remotemcpserver-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RemoteMCPServer")
 		os.Exit(1)

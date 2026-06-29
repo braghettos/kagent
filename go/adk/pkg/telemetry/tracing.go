@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -15,12 +16,17 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.36.0"
 	"go.opentelemetry.io/otel/trace"
 	adktelemetry "google.golang.org/adk/telemetry"
 )
+
+// errorsJoin is a thin alias so the metric shutdown path can combine errors
+// without shadowing the stdlib import name used elsewhere.
+func errorsJoin(errs ...error) error { return errors.Join(errs...) }
 
 // SetKAgentSpanAttributes sets kagent span attributes in the OpenTelemetry context
 func SetKAgentSpanAttributes(ctx context.Context, attributes map[string]string) context.Context {
@@ -82,12 +88,39 @@ func Init(ctx context.Context, serviceName string, serviceNamespace string) (shu
 		propagation.Baggage{},
 	))
 
-	return telemetryProviders.Shutdown, true, nil
+	// The MeterProvider is managed here rather than via adktelemetry, which does
+	// not register or shut down meter providers. Gated on OTEL_METRICS_ENABLED.
+	var meterProvider *sdkmetric.MeterProvider
+	if metricsEnabled() {
+		mp, mpErr := newMeterProvider(ctx, telemetryResource)
+		if mpErr != nil {
+			return nil, true, mpErr
+		}
+		otel.SetMeterProvider(mp)
+		if instErr := initGenAIMetrics(); instErr != nil {
+			return nil, true, instErr
+		}
+		meterProvider = mp
+	}
+
+	shutdown = func(shutdownCtx context.Context) error {
+		err := telemetryProviders.Shutdown(shutdownCtx)
+		if meterProvider != nil {
+			if mpErr := meterProvider.Shutdown(shutdownCtx); mpErr != nil {
+				err = errorsJoin(err, mpErr)
+			}
+			resetGenAIMetrics()
+		}
+		return err
+	}
+
+	return shutdown, true, nil
 }
 
 func isTelemetryEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("OTEL_TRACING_ENABLED")), "true") ||
-		strings.EqualFold(strings.TrimSpace(os.Getenv("OTEL_LOGGING_ENABLED")), "true")
+		strings.EqualFold(strings.TrimSpace(os.Getenv("OTEL_LOGGING_ENABLED")), "true") ||
+		metricsEnabled()
 }
 
 // resolveOTLPProtocol returns the OTLP protocol for the given signal,
