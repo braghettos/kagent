@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -82,12 +83,39 @@ func Init(ctx context.Context, serviceName string, serviceNamespace string) (shu
 		propagation.Baggage{},
 	))
 
-	return telemetryProviders.Shutdown, true, nil
+	// adktelemetry manages only the tracer and logger providers, so the metrics
+	// pipeline is built and installed here. Its shutdown is composed with the
+	// adktelemetry shutdown below so both flush on exit.
+	shutdownFns := []func(context.Context) error{telemetryProviders.Shutdown}
+	if metricsEnabled() {
+		meterProvider, mpErr := newMeterProvider(ctx, telemetryResource)
+		if mpErr != nil {
+			return nil, true, mpErr
+		}
+		otel.SetMeterProvider(meterProvider)
+		if instErr := initGenAIMetrics(); instErr != nil {
+			return nil, true, instErr
+		}
+		shutdownFns = append(shutdownFns, func(ctx context.Context) error {
+			resetGenAIMetrics()
+			return meterProvider.Shutdown(ctx)
+		})
+	}
+
+	shutdown = func(ctx context.Context) error {
+		var shutdownErr error
+		for _, fn := range shutdownFns {
+			shutdownErr = errors.Join(shutdownErr, fn(ctx))
+		}
+		return shutdownErr
+	}
+	return shutdown, true, nil
 }
 
 func isTelemetryEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("OTEL_TRACING_ENABLED")), "true") ||
-		strings.EqualFold(strings.TrimSpace(os.Getenv("OTEL_LOGGING_ENABLED")), "true")
+		strings.EqualFold(strings.TrimSpace(os.Getenv("OTEL_LOGGING_ENABLED")), "true") ||
+		metricsEnabled()
 }
 
 // resolveOTLPProtocol returns the OTLP protocol for the given signal,
